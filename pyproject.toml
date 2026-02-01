@@ -1,0 +1,26 @@
+[project]
+name = "flowweave"
+version = "1.0.0"
+description = "YAML-based workflow runner for task orchestration"
+authors = [{name = "syatch"}]
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "colorama>=0.4.6",
+    "jsonschema>=4.25.0",
+    "prefect>=2,<3",
+    "pyyaml>=6,<7"
+]
+
+[tool.setuptools.packages.find]
+include = ["flowweave", "flowweave.*"]
+
+[tool.setuptools.package-data]
+"flowweave" = ["schema/*.json"]
+
+[project.scripts]
+flowweave = "flowweave.cli:main"
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"

@@ -1,0 +1,20 @@
+{
+  "type": "object",
+  "properties": {
+    "op": {
+      "type": "object",
+      "patternProperties": {
+        ".*": {
+          "type": "object",
+          "properties": {
+            "script": { "type": "string" }
+          },
+          "required": ["script"],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": ["op"]
+}

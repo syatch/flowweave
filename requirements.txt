@@ -1,0 +1,5 @@
+colorama==0.4.6
+jsonschema==4.26.0
+prefect==2.20.25
+PyYAML==6.0.2
+PyYAML==6.0.3

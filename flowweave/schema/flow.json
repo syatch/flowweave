@@ -1,0 +1,72 @@
+{
+  "type": "object",
+  "properties": {
+    "flow": {
+      "type": ["array", "string"],
+      "items": { "type": "string" }
+    },
+
+    "op_source": {
+      "type": ["array", "string"],
+      "items": { "type": "string" }
+    },
+
+    "global_option": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "array",
+          "items": {}
+        }
+      }
+    },
+
+    "default_option": {
+      "type": "object",
+      "additionalProperties": true
+    },
+
+    "stage": {
+      "type": "object",
+      "patternProperties": {
+        ".*": {
+          "type": "object",
+          "patternProperties": {
+            ".*": {
+              "type": "object",
+              "properties": {
+                "op": { "type": "string" },
+
+                "do_only": {
+                  "type": "string",
+                  "enum": ["pre_success", "pre_fail"]
+                },
+                "chain": {
+                  "type": "object",
+                  "properties": {
+                    "part": { "type": "string" },
+                    "next": {
+                      "type": ["array", "string"],
+                      "items": { "type": "string" }
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "option": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "required": ["op"],
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "required": ["flow", "op_source", "stage"]
+}
