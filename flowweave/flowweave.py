@@ -1,11 +1,12 @@
 # Standard library
 import copy
 import importlib
+from importlib.resources import files
 import itertools
 import json
 import logging
 from pathlib import Path
-from importlib.resources import files
+import sys
 
 # Third-party
 import jsonschema
@@ -43,7 +44,7 @@ class FlowWeaveTask():
     @task
     def start(prev_future, task_data: TaskData):
         try:
-            task_instance = task_data.task_class.runner()
+            task_instance = task_data.task_class.runner(prev_future)
         except AttributeError:
             raise TypeError(f"{task_data.task_class} must define runner")
 
@@ -58,7 +59,6 @@ class FlowWeaveTask():
             else:
                 if task_data.show_log:
                     FlowWeave._print_log(f"Task option {key} not found: ignore")
-
         run_task = True
         if prev_future:
             if "pre_success" == task_data.do_only:
@@ -70,7 +70,7 @@ class FlowWeaveTask():
             FlowWeaveTask.message_task_start(prev_future, task_data)
 
             try:
-                task_result = task_instance()
+                task_result, return_data = task_instance()
             except Exception as e:
                 FlowMessage.error(e)
                 task_result = Result.FAIL
@@ -80,7 +80,7 @@ class FlowWeaveTask():
             FlowWeaveTask.message_task_ignore(prev_future, task_data)
             task_result = Result.IGNORE
 
-        return {"name" : task_data.name, "option" : task_data.option, "result" : task_result}
+        return {"name" : task_data.name, "option" : task_data.option, "data" : return_data, "result" : task_result}
 
     def message_task_start(prev_future, task_data: TaskData):
         if prev_future:
@@ -190,33 +190,44 @@ class FlowWeave():
         avaliable_settings = [str(f) for f in base_path.rglob("op_code.yml")]
         for setting in avaliable_settings:
             place = setting.replace("\\", ".").removeprefix("task.").removesuffix(".op_code.yml")
-            return_dic[place] = FlowWeave._get_op_dic_from_setting_file(setting.replace("\\", "/"))
+            return_dic[place] = FlowWeave._get_op_dic_from_setting_file(setting.replace("\\", "/"), info=True)
 
         return return_dic
 
-    def _get_op_dic_from_setting_file(setting_file: str):
+    def _get_op_dic_from_setting_file(setting_file: str, info: bool = False):
         return_dic = dict()
 
         setting = FlowWeave.load_and_validate_schema(setting_file, "op_code")
         source_name = setting_file.removesuffix("/op_code.yml").replace("/", ".")
 
+        task_root = Path("task").resolve()
+        if str(task_root.parent) not in sys.path:
+            sys.path.insert(0, str(task_root.parent))
+
         op_dic = setting.get("op", {})
         for op, op_info in op_dic.items():
             script_name = op_info.get('script')
-            op_class = FlowWeave._get_op_class(source_name, script_name)
+            op_class = FlowWeave._get_op_class(source_name, script_name, info)
 
             return_dic[str(op)] = op_class
 
         return return_dic
 
-    def _get_op_class(source_name: str, script_name: str):
-        file_path = Path(f"{source_name.replace('.', '/')}/{script_name}.py").resolve()
-        spec = importlib.util.spec_from_file_location(file_path.stem, file_path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        op_class = getattr(module, "Task")
+    def _get_op_class(source_name: str, script_name: str, info: bool = False):
+        module_name = f"{source_name}.{script_name}"
+        try:
+            module = importlib.import_module(module_name)
+        except Exception as e:
+            raise RuntimeError(f"Failed to import {module_name}: {e}")
 
-        return op_class
+        if not hasattr(module, "Task"):
+            raise RuntimeError(f"'Task' class not found in {module_name}")
+
+        return_module = module.Task
+        if info:
+            return_module = module.Task.runner
+
+        return return_module
 
     def _get_global_option_comb(global_option: dict) -> list:
         keys = list(global_option.keys())

@@ -9,8 +9,12 @@ from .base import Result, TaskData
 
 class FlowMessage:
     @staticmethod
-    def _print(text: str) -> None:
-        print(text)
+    def _print(*args: object,
+               sep: str = " ",
+               end: str = "\n",
+               file: Optional[IO[str]] = None,
+               flush: bool = False) -> None:
+        print(*args, sep=sep, end=end, file=file, flush=flush)
 
     @staticmethod
     def get_result_text(result: Result) -> str:
@@ -21,9 +25,9 @@ class FlowMessage:
         elif Result.IGNORE == result:
             text = f"{Fore.CYAN}IGNORE"
         elif Result.FAIL == result:
-            text = f"{Fore.CYAN}FAIL"
+            text = f"{Fore.RED}FAIL"
         else:
-            text = f"{Fore.RED}UNKNOWN: {result.name}({result.value})"
+            text = f"{Fore.MAGENTA}UNKNOWN: {result.name}({result.value})"
 
         return text
 
