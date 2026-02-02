@@ -53,9 +53,10 @@ stage:
       chain:
         part: head
 ```
-```
+
 
 ## 3. Implement Tasks / Operators
+Custom task directories must be valid Python packages (contain __init__.py)
 
 Create task scripts following the FlowWeave task structure. Example `task/my_task.py`:
 

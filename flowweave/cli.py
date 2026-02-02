@@ -23,9 +23,9 @@ def serialize(obj) -> str:
         return obj.__name__
     raise TypeError(f"Type {type(obj)} not serializable")
 
-def show_flow_op(setting_path: str, flow_name: str) -> None:
+def show_flow_op(setting_path: str, flow_name: str, info: bool = False) -> None:
     flow_data = FlowWeave.load_and_validate_schema(file=setting_path, schema="flow")
-    op_dic = FlowWeave.get_op_dic(flow_data)
+    op_dic = FlowWeave.get_op_dic(flow_data, info=info)
     print_op_dic(op_dic, flow_name)
 
 def show_available_op() -> None:
@@ -75,7 +75,7 @@ def main() -> None:
         result = all(x == Result.SUCCESS for x in results)
     elif args.command == "info":
         if args.flow_file:
-            show_flow_op(setting_path, args.flow_file)
+            show_flow_op(setting_path, args.flow_file, info=True)
         else:
             show_available_op()
     else:

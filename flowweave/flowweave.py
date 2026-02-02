@@ -171,7 +171,7 @@ class FlowWeave():
 
         return data
 
-    def get_op_dic(flow_data: dict):
+    def get_op_dic(flow_data: dict, info: bool = False):
         return_dic = dict()
 
         op_source = flow_data.get("op_source")
@@ -179,7 +179,7 @@ class FlowWeave():
         for source in op_source_list:
             source_name = f"task/{source}"
             setting_file = f"{source_name.replace('.', '/')}/op_code.yml"
-            return_dic |= FlowWeave._get_op_dic_from_setting_file(setting_file)
+            return_dic |= FlowWeave._get_op_dic_from_setting_file(setting_file, info=info)
 
         return return_dic
 

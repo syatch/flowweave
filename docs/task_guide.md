@@ -4,6 +4,8 @@
 
 This document explains how to implement tasks (operators) for FlowWeave.
 
+Custom task directories must be valid Python packages (contain __init__.py)
+
 ## 1. Task Class Structure
 
 Each operator must define a `Task` class that inherits from `FlowWeaveTask` and a runner class that inherits from `FlowWeaveTaskRunner`.
