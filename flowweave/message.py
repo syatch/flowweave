@@ -5,7 +5,7 @@ from typing import IO, Optional
 from colorama import Fore
 
 # Local application / relative imports
-from .base import Result, TaskData
+from .base import FlowWeaveResult, TaskData
 
 class FlowMessage:
     @staticmethod
@@ -17,14 +17,14 @@ class FlowMessage:
         print(*args, sep=sep, end=end, file=file, flush=flush)
 
     @staticmethod
-    def get_result_text(result: Result) -> str:
+    def get_result_text(result: FlowWeaveResult) -> str:
         text = ""
 
-        if Result.SUCCESS == result:
+        if FlowWeaveResult.SUCCESS == result:
             text = f"{Fore.GREEN}SUCCESS"
-        elif Result.IGNORE == result:
+        elif FlowWeaveResult.IGNORE == result:
             text = f"{Fore.CYAN}IGNORE"
-        elif Result.FAIL == result:
+        elif FlowWeaveResult.FAIL == result:
             text = f"{Fore.RED}FAIL"
         else:
             text = f"{Fore.MAGENTA}UNKNOWN: {result.name}({result.value})"
@@ -42,7 +42,7 @@ class FlowMessage:
         FlowMessage._print(text)
 
     @staticmethod
-    def flow_end(part: int, all: int, result: Result) -> None:
+    def flow_end(part: int, all: int, result: FlowWeaveResult) -> None:
         result_text = FlowMessage.get_result_text(result)
         text = f"{Fore.YELLOW}[Flow {part} / {all}] Finish - {result_text}"
         FlowMessage._print(text)
@@ -53,7 +53,7 @@ class FlowMessage:
         FlowMessage._print(text)
 
     @staticmethod
-    def stage_end(stage: str, part: int, all: int, result: Result) -> None:
+    def stage_end(stage: str, part: int, all: int, result: FlowWeaveResult) -> None:
         result_text = FlowMessage.get_result_text(result)
         text = f"{Fore.MAGENTA}[Flow {part} / {all}] Finish Stage {stage} - {result_text}"
         FlowMessage._print(text)
@@ -79,7 +79,7 @@ class FlowMessage:
         FlowMessage._print(text)
 
     @staticmethod
-    def task_end(task_data: TaskData, result: Result) -> None:
+    def task_end(task_data: TaskData, result: FlowWeaveResult) -> None:
         result_text = FlowMessage.get_result_text(result)
         text = f"{Fore.CYAN}[Flow {task_data.flow_part} / {task_data.flow_all}] Finish Task {task_data.stage_name}/{task_data.name} - {result_text}"
         FlowMessage._print(text)

@@ -4,7 +4,7 @@ from typing import IO, Optional
 
 from colorama import Fore
 
-class Result(IntEnum):
+class FlowWeaveResult(IntEnum):
     FAIL = 0
     SUCCESS = 1
     IGNORE = 2
@@ -30,17 +30,17 @@ class TaskData:
         self.do_only = do_only
         self.show_log = show_log
 
-class FlowWeaveTaskRunner:
+class FlowWeaveTask:
     def __init__(self, prev_future):
         self.prev_future = prev_future
         self.return_data = None
 
-    def __call__(self) -> Result:
-        result = self.run()
-        return result
+    def __call__(self):
+        result, return_data = self.run()
+        return result, return_data
 
-    def run(self) -> Result:
-        return Result.SUCCESS
+    def run(self):
+        return FlowWeaveResult.SUCCESS, self.return_data
 
     def set_task_data(self, task_data: TaskData) -> None:
         self.task_data = task_data

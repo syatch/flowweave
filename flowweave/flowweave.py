@@ -1,7 +1,9 @@
 # Standard library
 import copy
+from functools import reduce
 import importlib
 from importlib.resources import files
+import inspect
 import itertools
 import json
 import logging
@@ -14,7 +16,7 @@ import yaml
 from prefect import flow, task, get_run_logger
 
 # Local application / relative imports
-from .base import Result, TaskData
+from .base import FlowWeaveResult, TaskData, FlowWeaveTask
 from .message import FlowMessage
 
 class StageData():
@@ -38,15 +40,13 @@ class StageData():
         text += "==========="
         return text
 
-class FlowWeaveTask():
-    task_class = None
-
+class TaskRunner():
     @task
     def start(prev_future, task_data: TaskData):
         try:
-            task_instance = task_data.task_class.runner(prev_future)
+            task_instance = task_data.task_class(prev_future)
         except AttributeError:
-            raise TypeError(f"{task_data.task_class} must define runner")
+            raise TypeError(f"Failed to get instance of '{task_data.task_class}'")
 
         # set task member variables
         setattr(task_instance, "task_data", task_data)
@@ -62,23 +62,23 @@ class FlowWeaveTask():
         run_task = True
         if prev_future:
             if "pre_success" == task_data.do_only:
-                run_task = True if (Result.SUCCESS == prev_future.get("result")) else False
+                run_task = True if (FlowWeaveResult.SUCCESS == prev_future.get("result")) else False
             elif "pre_fail" == task_data.do_only:
-                run_task = True if (Result.FAIL == prev_future.get("result")) else False
+                run_task = True if (FlowWeaveResult.FAIL == prev_future.get("result")) else False
 
         if run_task:
-            FlowWeaveTask.message_task_start(prev_future, task_data)
+            TaskRunner.message_task_start(prev_future, task_data)
 
             try:
                 task_result, return_data = task_instance()
             except Exception as e:
                 FlowMessage.error(e)
-                task_result = Result.FAIL
+                task_result = FlowWeaveResult.FAIL
 
             FlowMessage.task_end(task_data, task_result)
         else:
-            FlowWeaveTask.message_task_ignore(prev_future, task_data)
-            task_result = Result.IGNORE
+            TaskRunner.message_task_ignore(prev_future, task_data)
+            task_result = FlowWeaveResult.IGNORE
 
         return {"name" : task_data.name, "option" : task_data.option, "data" : return_data, "result" : task_result}
 
@@ -207,27 +207,43 @@ class FlowWeave():
         op_dic = setting.get("op", {})
         for op, op_info in op_dic.items():
             script_name = op_info.get('script')
-            op_class = FlowWeave._get_op_class(source_name, script_name, info)
+            op_class = FlowWeave._get_op_class(source_name, script_name, FlowWeaveTask)
 
             return_dic[str(op)] = op_class
 
         return return_dic
 
-    def _get_op_class(source_name: str, script_name: str, info: bool = False):
+    def _get_op_class(source_name: str, script_name: str, base_class):
         module_name = f"{source_name}.{script_name}"
+
         try:
             module = importlib.import_module(module_name)
         except Exception as e:
             raise RuntimeError(f"Failed to import {module_name}: {e}")
 
-        if not hasattr(module, "Task"):
-            raise RuntimeError(f"'Task' class not found in {module_name}")
+        candidates = []
 
-        return_module = module.Task
-        if info:
-            return_module = module.Task.runner
+        for _, obj in inspect.getmembers(module, inspect.isclass):
+            if obj.__module__ != module.__name__:
+                continue
 
-        return return_module
+            if issubclass(obj, base_class) and obj is not base_class:
+                candidates.append(obj)
+
+        if len(candidates) == 0:
+            raise RuntimeError(
+                f"No subclass of {base_class.__name__} found in {module_name}"
+            )
+
+        if len(candidates) > 1:
+            names = ", ".join(c.__name__ for c in candidates)
+            raise RuntimeError(
+                f"Multiple subclasses of {base_class.__name__} found in {module_name}: {names}"
+            )
+
+        cls = candidates[0]
+
+        return cls
 
     def _get_global_option_comb(global_option: dict) -> list:
         keys = list(global_option.keys())
@@ -247,7 +263,7 @@ class FlowWeave():
 
     @task
     def run_flow(flow_data: dict, global_cmb: dict, op_dic: dict, part: int, all: int, show_log: bool = False) -> list[str]:
-        flow_result = Result.SUCCESS
+        flow_result = FlowWeaveResult.SUCCESS
 
         if show_log:
             text = "= Flow =\n"
@@ -269,8 +285,8 @@ class FlowWeave():
                 FlowWeave._print_log(str(stage_data))
 
             result = FlowWeave._run_stage(stage_data, show_log)
-            if Result.FAIL == result:
-                flow_result = Result.FAIL
+            if FlowWeaveResult.FAIL == result:
+                flow_result = FlowWeaveResult.FAIL
 
             FlowMessage.stage_end(stage, part, all, flow_result)
 
@@ -293,7 +309,7 @@ class FlowWeave():
             logger.info(f"{text}")
 
     def _run_stage(stage_data: StageData, show_log: bool = False):
-        stage_result = Result.SUCCESS
+        stage_result = FlowWeaveResult.SUCCESS
 
         all_futures = []
 
@@ -306,10 +322,22 @@ class FlowWeave():
 
         for f in all_futures:
             result = f.result()
-            if Result.FAIL == result.get("result"):
-                stage_result = Result.FAIL
+            if FlowWeaveResult.FAIL == result.get("result"):
+                stage_result = FlowWeaveResult.FAIL
 
         return stage_result
+
+    def _deep_merge(a: dict, b: dict) -> dict:
+        result = a.copy()
+        for k, v in b.items():
+            if k in result and isinstance(result[k], dict) and isinstance(v, dict):
+                result[k] = FlowWeave._deep_merge(result[k], v)
+            else:
+                result[k] = v
+        return result
+
+    def _deep_merge_many(*dicts):
+        return reduce(FlowWeave._deep_merge, dicts)
 
     def _run_task(stage_data: dict, task_name: str, prev_future = None, visited = None, show_log: bool = False):
         if visited is None:
@@ -326,11 +354,7 @@ class FlowWeave():
 
         default_option = stage_data.default_option or {}
         global_option = stage_data.global_option or {}
-        task_option = copy.deepcopy(
-            default_option
-            | global_option
-            | task_dic.get("option", {})
-        )
+        task_option = FlowWeave._deep_merge_many(default_option, global_option, task_dic.get("option", {}))
 
         task_data = TaskData(name=task_name,
                              task_class=task_module,
@@ -341,9 +365,9 @@ class FlowWeave():
                              do_only=task_dic.get("do_only"),
                              show_log=show_log)
         if prev_future is None:
-            future = task_module.start.submit(None, task_data)
+            future = TaskRunner.start.submit(None, task_data)
         else:
-            future = task_module.start.submit(prev_future, task_data)
+            future = TaskRunner.start.submit(prev_future, task_data)
 
         links = task_dic.get("chain", {}).get("next", [])
         links = links if isinstance(links, list) else [links]

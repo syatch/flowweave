@@ -8,7 +8,7 @@ import colorama
 
 # Local application / relative imports
 from .flowweave import FlowWeave
-from .base import Result
+from .base import FlowWeaveResult
 
 def get_setting_path(args):
     setting_path = None
@@ -59,7 +59,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 def main() -> None:
-    result = Result.SUCCESS
+    result = FlowWeaveResult.SUCCESS
 
     colorama.init(autoreset=True)
 
@@ -72,7 +72,7 @@ def main() -> None:
         if not setting_path:
             parser.error("run requires flow_file")
         results = FlowWeave.run(setting_file=setting_path, parallel=args.parallel, show_log = args.log)
-        result = all(x == Result.SUCCESS for x in results)
+        result = all(x == FlowWeaveResult.SUCCESS for x in results)
     elif args.command == "info":
         if args.flow_file:
             show_flow_op(setting_path, args.flow_file, info=True)

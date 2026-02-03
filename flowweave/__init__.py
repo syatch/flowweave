@@ -1,6 +1,6 @@
-__version__ = "2.0.1"
+__version__ = "3.0.0"
 __author__ = "syatch"
 __license__ = "MIT"
 
-from .flowweave import FlowWeave, FlowWeaveTask
-from .base import Result, TaskData, FlowWeaveTaskRunner
+from .flowweave import FlowWeave
+from .base import FlowWeaveResult, FlowWeaveTask
