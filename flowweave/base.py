@@ -1,5 +1,6 @@
 # Standard library
 from enum import IntEnum
+import importlib
 from typing import IO, Optional
 
 from colorama import Fore
@@ -10,6 +11,22 @@ class FlowWeaveResult(IntEnum):
     IGNORE = 2
 
 class TaskData:
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["task_class_path"] = (
+            self.task_class.__module__,
+            self.task_class.__name__,
+        )
+        del state["task_class"]
+        return state
+
+    def __setstate__(self, state):
+        module_name, class_name = state["task_class_path"]
+        module = importlib.import_module(module_name)
+        state["task_class"] = getattr(module, class_name)
+        del state["task_class_path"]
+        self.__dict__.update(state)
+
     def __init__(self,
                  name,
                  task_class,

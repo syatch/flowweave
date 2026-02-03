@@ -1,5 +1,4 @@
 # Standard library
-import copy
 from functools import reduce
 import importlib
 from importlib.resources import files
@@ -8,6 +7,7 @@ import itertools
 import json
 import logging
 from pathlib import Path
+import pickle
 import sys
 
 # Third-party
@@ -43,6 +43,10 @@ class StageData():
 class TaskRunner():
     @task
     def start(prev_future, task_data: TaskData):
+        if hasattr(prev_future, "result"):
+            prev_future = prev_future.result()
+
+        return_data = None
         try:
             task_instance = task_data.task_class(prev_future)
         except AttributeError:
@@ -60,7 +64,8 @@ class TaskRunner():
                 if task_data.show_log:
                     FlowWeave._print_log(f"Task option {key} not found: ignore")
         run_task = True
-        if prev_future:
+
+        if prev_future is not None:
             if "pre_success" == task_data.do_only:
                 run_task = True if (FlowWeaveResult.SUCCESS == prev_future.get("result")) else False
             elif "pre_fail" == task_data.do_only:
@@ -80,17 +85,23 @@ class TaskRunner():
             TaskRunner.message_task_ignore(prev_future, task_data)
             task_result = FlowWeaveResult.IGNORE
 
+        try:
+            if return_data is not None:
+                pickle.dumps(return_data)
+        except Exception:
+            raise TypeError(f"Task '{task_data.name}' return_data is not serializable")
+
         return {"name" : task_data.name, "option" : task_data.option, "data" : return_data, "result" : task_result}
 
     def message_task_start(prev_future, task_data: TaskData):
-        if prev_future:
+        if prev_future is not None:
             prev_task_name = prev_future.get("name")
             FlowMessage.task_start_link(prev_task_name, task_data)
         else:
             FlowMessage.task_start(task_data)
 
     def message_task_ignore(prev_future, task_data: TaskData):
-        if prev_future:
+        if prev_future is not None:
             prev_task_name = prev_future.get("name")
             FlowMessage.task_ignore_link(task_data, prev_task_name)
         else:
@@ -98,7 +109,7 @@ class TaskRunner():
 
 class FlowWeave():
     @flow
-    def run(setting_file: str, parallel: bool = False, show_log: bool = False) -> list[str]:
+    def run(setting_file: str, parallel: bool = False, show_log: bool = False) -> list[FlowWeaveResult]:
         if not show_log:
             logging.getLogger("prefect").setLevel(logging.CRITICAL)
 
@@ -262,7 +273,7 @@ class FlowWeave():
         return all_combinations
 
     @task
-    def run_flow(flow_data: dict, global_cmb: dict, op_dic: dict, part: int, all: int, show_log: bool = False) -> list[str]:
+    def run_flow(flow_data: dict, global_cmb: dict, op_dic: dict, part: int, all: int, show_log: bool = False) -> FlowWeaveResult:
         flow_result = FlowWeaveResult.SUCCESS
 
         if show_log:
@@ -271,7 +282,7 @@ class FlowWeave():
             text += "========"
             FlowWeave._print_log(text)
 
-        default_option = flow_data.get("default_option")
+        default_option = flow_data.get("default_option", {})
 
         stage_list = flow_data.get("flow")
         for stage in stage_list:
@@ -288,7 +299,7 @@ class FlowWeave():
             if FlowWeaveResult.FAIL == result:
                 flow_result = FlowWeaveResult.FAIL
 
-            FlowMessage.stage_end(stage, part, all, flow_result)
+            FlowMessage.stage_end(stage, part, all, result)
 
         return flow_result
 
@@ -328,7 +339,7 @@ class FlowWeave():
         return stage_result
 
     def _deep_merge(a: dict, b: dict) -> dict:
-        result = a.copy()
+        result = copy.deepcopy(a)
         for k, v in b.items():
             if k in result and isinstance(result[k], dict) and isinstance(v, dict):
                 result[k] = FlowWeave._deep_merge(result[k], v)
@@ -346,36 +357,42 @@ class FlowWeave():
             raise Exception(f"Cycle detected at task '{task_name}' in {visited}")
         visited.add(task_name)
 
-        task_dic = stage_data.stage_info.get(task_name)
+        try:
+            task_dic = stage_data.stage_info.get(task_name)
+            if task_dic is None:
+                raise KeyError(f"Task '{task_name}' not found in stage '{stage_data.name}'")
 
-        task_module = stage_data.op_dic.get(task_dic.get('op'))
-        if not task_module:
-            raise Exception(f"module of op '{task_dic.get('op')}' for '{task_name}' not found")
+            task_module = stage_data.op_dic.get(task_dic.get('op'))
+            if not task_module:
+                raise Exception(f"module of op '{task_dic.get('op')}' for '{task_name}' not found")
 
-        default_option = stage_data.default_option or {}
-        global_option = stage_data.global_option or {}
-        task_option = FlowWeave._deep_merge_many(default_option, global_option, task_dic.get("option", {}))
+            default_option = stage_data.default_option or {}
+            global_option = stage_data.global_option or {}
+            task_option = FlowWeave._deep_merge_many(default_option, global_option, task_dic.get("option", {}))
 
-        task_data = TaskData(name=task_name,
-                             task_class=task_module,
-                             option=task_option,
-                             stage_name=stage_data.name,
-                             flow_part=stage_data.flow_part,
-                             flow_all=stage_data.flow_all,
-                             do_only=task_dic.get("do_only"),
-                             show_log=show_log)
-        if prev_future is None:
-            future = TaskRunner.start.submit(None, task_data)
-        else:
-            future = TaskRunner.start.submit(prev_future, task_data)
+            task_data = TaskData(name=task_name,
+                                task_class=task_module,
+                                option=task_option,
+                                stage_name=stage_data.name,
+                                flow_part=stage_data.flow_part,
+                                flow_all=stage_data.flow_all,
+                                do_only=task_dic.get("do_only"),
+                                show_log=show_log)
+            if prev_future is None:
+                future = TaskRunner.start.submit(None, task_data)
+            else:
+                future = TaskRunner.start.submit(prev_future, task_data)
 
-        links = task_dic.get("chain", {}).get("next", [])
-        links = links if isinstance(links, list) else [links]
+            links = task_dic.get("chain", {}).get("next", [])
+            links = links if isinstance(links, list) else [links]
 
-        futures = [future]
-        for link in links:
-            futures.extend(
-                FlowWeave._run_task(stage_data, link, future, visited.copy(), show_log)
-            )
+            futures = [future]
+            for link in links:
+                futures.extend(
+                    FlowWeave._run_task(stage_data, link, future, visited.copy(), show_log)
+                )
 
-        return futures
+            return futures
+
+        finally:
+            visited.remove(task_name)
