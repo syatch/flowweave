@@ -1,4 +1,6 @@
 # Standard library
+from collections.abc import Mapping
+import copy
 from functools import reduce
 import importlib
 from importlib.resources import files
@@ -340,11 +342,44 @@ class FlowWeave():
 
     def _deep_merge(a: dict, b: dict) -> dict:
         result = copy.deepcopy(a)
+
         for k, v in b.items():
-            if k in result and isinstance(result[k], dict) and isinstance(v, dict):
-                result[k] = FlowWeave._deep_merge(result[k], v)
+            if k in result:
+                av = result[k]
+
+                if isinstance(av, Mapping) and isinstance(v, Mapping):
+                    result[k] = FlowWeave._deep_merge(av, v)
+
+                elif isinstance(av, list) or isinstance(v, list):
+                    result[k] = FlowWeave._merge_to_list(av, v)
+
+                else:
+                    result[k] = copy.deepcopy(v)
             else:
-                result[k] = v
+                result[k] = copy.deepcopy(v)
+
+        return result
+
+    def _merge_to_list(a_val, b_val):
+        a_list = copy.deepcopy(a_val) if isinstance(a_val, list) else [copy.deepcopy(a_val)]
+        b_list = copy.deepcopy(b_val) if isinstance(b_val, list) else [copy.deepcopy(b_val)]
+
+        result = a_list
+
+        for item in b_list:
+            if isinstance(item, dict):
+                merged = False
+                for i, existing in enumerate(result):
+                    if isinstance(existing, dict):
+                        result[i] = FlowWeave._deep_merge(existing, item)
+                        merged = True
+                        break
+                if not merged:
+                    result.append(item)
+            else:
+                if item not in result:
+                    result.append(item)
+
         return result
 
     def _deep_merge_many(*dicts):

@@ -1,6 +1,6 @@
 [project]
 name = "flowweave"
-version = "3.0.2"
+version = "4.0.0"
 description = "YAML-based workflow runner for task orchestration"
 authors = [{name = "syatch"}]
 readme = "README.md"
